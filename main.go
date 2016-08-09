@@ -21,6 +21,14 @@ const (
 	eventURL = "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
 )
 
+type alarmState uint
+
+const (
+	stateUnknown alarmState = iota
+	stateOK
+	stateFailed
+)
+
 var (
 	cfg = struct {
 		VaultAddress string `flag:"vault-address" default:"http://localhost:8200" env:"VAULT_ADDR" description:"Address of the Vault instance"`
@@ -38,7 +46,7 @@ var (
 
 	version             = "dev"
 	currentAlertCounter int
-	alertActive         = false
+	alertActive         alarmState
 )
 
 func init() {
@@ -69,22 +77,20 @@ func main() {
 			log.Printf("Something went wrong, counter is now at %d / %d", currentAlertCounter, cfg.AlertThreshold)
 			log.Printf("Recorded error: %s", err)
 		} else {
-			currentAlertCounter = 0
 			if cfg.Verbose {
 				log.Printf("Successful test.")
 			}
-			if alertActive {
-				sendPagerDutyAlert(false)
+			if err := sendPagerDutyAlert(false); err != nil {
+				log.Printf("Was not able to resolve PagerDuty alert: %s", err)
+				continue
 			}
 		}
 
 		if currentAlertCounter >= cfg.AlertThreshold {
-			alertActive = true
 			if err := sendPagerDutyAlert(true); err != nil {
 				log.Printf("Was not able to send PagerDuty alert: %s", err)
 				continue
 			}
-			currentAlertCounter = 0
 		}
 	}
 
@@ -143,6 +149,10 @@ type pagerDutyContext struct {
 }
 
 func sendPagerDutyAlert(trigger bool) error {
+	if (trigger && alertActive == stateFailed) || (!trigger && alertActive == stateOK) {
+		return nil
+	}
+
 	obj := pagerDutyEvent{
 		ServiceKey:  cfg.PagerDutyIntegrationKey,
 		EventType:   "trigger",
@@ -169,6 +179,13 @@ func sendPagerDutyAlert(trigger bool) error {
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("Experienced unexected status code: %d", resp.StatusCode)
 	}
+
+	if trigger {
+		alertActive = stateFailed
+	} else {
+		alertActive = stateOK
+	}
+	currentAlertCounter = 0
 
 	return nil
 }
