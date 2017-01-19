@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	eventURL = "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
+	eventURL  = "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
+	clientURL = "https://github.com/Jimdo/vault-rw-monitoring"
 )
 
 type alarmState uint
@@ -159,6 +160,7 @@ func sendPagerDutyAlert(trigger bool) error {
 		IncidentKey: generateIncidentKey(),
 		Description: fmt.Sprintf("Vault instance at %s failed %d consecutive tests of the vault-rw-monitoring", cfg.VaultAddress, cfg.AlertThreshold),
 		Client:      fmt.Sprintf("vault-rw-monitoring %s", version),
+		ClientURL:   clientURL,
 	}
 
 	if !trigger {
